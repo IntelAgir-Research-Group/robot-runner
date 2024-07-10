@@ -1,3 +1,4 @@
+import asyncio
 import time
 from typing import Dict, List
 import multiprocessing
@@ -12,6 +13,8 @@ from ProgressManager.Output.OutputProcedure import OutputProcedure as output
 from ConfigValidator.CustomErrors.ExperimentOutputErrors import ExperimentOutputPathAlreadyExistsError
 from EventManager.EventSubscriptionController import EventSubscriptionController
 from ConfigValidator.CustomErrors.ProgressErrors import AllRunsCompletedOnRestartError
+from ExperimentOrchestrator.Architecture.Distributed.RRWebSocketServer import RRWebSocketServer
+from websockets.server import serve
 
 ###     =========================================================
 ###     |                                                       |
@@ -32,9 +35,16 @@ class ExperimentController:
     restarted: bool                = False
     experiment_path_as_string: str = None
     data_manager: CSVOutputManager = None
-    connected_clients: int         = 0
+    rr_server: RRWebSocketServer   = None
+    ws_server: serve               = None
+    server_ip: str                 = None
+    server_port: int               = None
 
     def __init__(self, config: RobotRunnerConfig):
+
+        self.server_ip = "server.robot-runner"
+        self.server_port = 8765
+
         self.config = config
         self.experiment_path_as_string = str(self.config.experiment_path.absolute())
 
@@ -51,22 +61,20 @@ class ExperimentController:
         
         output.console_log_WARNING("Experiment run table created...")
 
-    def do_experiment(self):
-        #######################################
-        # Wait for all the clients to connect #
-
-        #### START THE SERVER
-
+    async def do_experiment(self):
         clients = self.config.distributed_clients
         if clients is not None:
-            output.console_log_OK('Distributed execution.')
+            # Start the Server
+            self.rr_server = RRWebSocketServer(self.server_ip, self.server_port)
+            self.ws_server = await self.rr_server.start_server()
+            # Waiting for the clients to connect
+            output.console_log_OK(f'Distributed execution with {clients} clients.')
             clients = int(clients)
             output.console_log_OK(f'Waiting for the {clients} clients to connect!')
-            while self.connected_clients < clients: ### CONECTED_CLIENTS COMES FROM SERVER
-                time.sleep(1)
+            while await self.rr_server.count_connected_clients() < clients:
+                await asyncio.sleep(1)
         else:
             output.console_log_OK("Local execution - NO CLIENTS")    
-        ######################################
 
 
         output.console_log_OK("Experiment setup completed...")
@@ -105,6 +113,8 @@ class ExperimentController:
         output.console_log_WARNING("Calling after_experiment config hook")
 
         EventSubscriptionController.raise_event(RobotRunnerEvents.AFTER_EXPERIMENT)
+
+        await self.rr_server.send_kill_signal()
 
     def create_experiment_output_folder(self):
         try:
