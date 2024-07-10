@@ -32,6 +32,7 @@ class ExperimentController:
     restarted: bool                = False
     experiment_path_as_string: str = None
     data_manager: CSVOutputManager = None
+    connected_clients: int         = 0
 
     def __init__(self, config: RobotRunnerConfig):
         self.config = config
@@ -51,6 +52,23 @@ class ExperimentController:
         output.console_log_WARNING("Experiment run table created...")
 
     def do_experiment(self):
+        #######################################
+        # Wait for all the clients to connect #
+
+        #### START THE SERVER
+
+        clients = self.config.distributed_clients
+        if clients is not None:
+            output.console_log_OK('Distributed execution.')
+            clients = int(clients)
+            output.console_log_OK(f'Waiting for the {clients} clients to connect!')
+            while self.connected_clients < clients: ### CONECTED_CLIENTS COMES FROM SERVER
+                time.sleep(1)
+        else:
+            output.console_log_OK("Local execution - NO CLIENTS")    
+        ######################################
+
+
         output.console_log_OK("Experiment setup completed...")
         
         # -- Before experiment
