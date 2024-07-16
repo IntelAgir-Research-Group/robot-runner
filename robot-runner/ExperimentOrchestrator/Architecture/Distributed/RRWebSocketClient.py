@@ -1,4 +1,5 @@
-import asyncio
+from abc import abstractmethod
+import sys
 import websockets
 import json
 
@@ -7,7 +8,7 @@ class RRWebSocketClient:
         self.server_address = server_address
         self.client_id = client_id
         self.kill_signal_received = False
-
+        
     async def register(self):
         async with websockets.connect(self.server_address) as websocket:
             registration_data = {
@@ -16,24 +17,26 @@ class RRWebSocketClient:
             }
             await websocket.send(json.dumps(registration_data))
             while not self.kill_signal_received:
-                message = await websocket.recv()
-                data = json.loads(message)
-                if data.get("type") == "kill":
-                    self.kill_signal_received = True
-                    print("Received kill signal. Terminating client.")
-                else:
-                    print(f"Received task: {data}")
-                    ### RECEIVES THE TASK TO BE EXECUTED
-                    ## Call the method received
-
-    # Implement Method CALL
-    
-# Main code
-async def main():
-    server_address = "ws://localhost:8765"
-    client_id = "c1"
-    client = RRWebSocketClient(server_address, client_id)
-    await client.register()
-
-# Run the main coroutine
-asyncio.run(main())
+                try:
+                    message = await websocket.recv()
+                    try:
+                        if message == "kill":
+                            self.kill_signal_received = True
+                            print("Received kill signal. Terminating client.")
+                        else:
+                            data = json.loads(message)
+                            if data.get("type") == "call":
+                                callable_method = data.get("method")
+                                print(f'Method to be called: {callable_method}')
+                                # Call Method
+                                #
+                                #
+                            else:
+                                print("Invalid request! Nothing to do!")
+                    except json.JSONDecodeError as jsonerror:
+                            print("Invalid request or JSON format issue.")
+                            print(message)
+                except websockets.exceptions.ConnectionClosedError as conerror:
+                    print("Connection closed by the server!")
+                    sys.exit(0)
+                    

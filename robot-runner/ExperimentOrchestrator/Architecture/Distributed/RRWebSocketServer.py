@@ -21,12 +21,17 @@ class RRWebSocketServer:
     async def broadcast(self, message):
         await asyncio.gather(*[client.send(message) for client in self.connected_clients.values()])
 
+    async def remote_call(self, message, client_ids):
+        selected_clients = [client for client_id, client in self.connected_clients.items() if client_id in client_ids]
+        call_message = json.dumps({"type": "call", "method": message})
+        await asyncio.gather(*[client.send(call_message) for client in selected_clients])
+
     async def send_to_clients(self, message, client_ids):
         selected_clients = [client for client_id, client in self.connected_clients.items() if client_id in client_ids]
         await asyncio.gather(*[client.send(message) for client in selected_clients])
     
     async def send_kill_signal(self):
-        await self.broadcast(json.dumps({"type": "kill"}))
+        await self.broadcast("kill")
 
     async def on_connect(self, websocket, path):
         try:
@@ -50,19 +55,3 @@ class RRWebSocketServer:
         server = await websockets.serve(self.on_connect, self.host, self.port)
         print('RR Server started!')
         return server
-
-# Main code
-# async def main():
-#     server = RRWebSocketServer("localhost", 8765)
-#     websocket_server = await server.start_server()
-#     count = 0
-#     while True:
-#         # Perform other tasks while the server is running
-#         await asyncio.sleep(1)
-#         if count > 30:
-#             print("Killing clients...")
-#             await server.send_kill_signal()
-#         count += 1
-
-# Run the main coroutine
-# asyncio.run(main())
